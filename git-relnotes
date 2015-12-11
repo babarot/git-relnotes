@@ -1,0 +1,79 @@
+#!/bin/bash
+
+available() {
+    local x candidates
+
+    # candidates should be list like "a:b:c" concatenated by a colon
+    candidates="$1:"
+
+    while [ -n "$candidates" ]; do
+        # the first remaining entry
+        x=${candidates%%:*}
+        # reset candidates
+        candidates=${candidates#*:}
+
+        # check if x is available
+        if has "${x%% *}"; then
+            echo "$x"
+            return 0
+        else
+            continue
+        fi
+    done
+
+    return 1
+}
+
+has() {
+    type "$1" &>/dev/null
+    return $?
+}
+
+die() {
+    if [ $# -ne 0 ]; then
+        echo "$@" >&2
+    fi
+    exit 1
+}
+
+grep_alternatives="pt:ag:ack:hw"
+interactive_tools="fzf:peco:percol:zaw"
+
+root="$(builtin cd "${0%/*}" && pwd -P)"
+documents="$root/RelNotes"
+
+filter="$(available "$grep_alternatives")"
+selector="$(available "$interactive_tools")"
+
+case "$1" in
+    "")
+        [[ -n $selector ]] || die
+        # ls -1 "$documents" | eval "$selector"
+
+        while cmd="$(
+            ls -1 "$documents" \
+                | FZF_DEFAULT_OPTS= fzf --ansi --multi --query="$@" \
+                --no-sort --prompt="git> " \
+                --print-query --expect=ctrl-l \
+                --bind=ctrl-z:toggle-all \
+                )"; do
+            q="$(head -1 <<< "$cmd")"
+            k="$(head -2 <<< "$cmd" | tail -1)"
+            res="$(sed '1,2d;/^$/d' <<< "$cmd")"
+            [ -z "$res" ] && continue
+            case "$k" in
+                ctrl-l)
+                    cat "$documents/$res" | less
+                    ;;
+                *)
+                    echo "$res"
+                    break
+                    ;;
+            esac
+        done
+        ;;
+    *)
+        [[ -n $filter ]] || die
+        eval "$filter $1"
+        ;;
+esac
